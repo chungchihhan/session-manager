@@ -1,0 +1,9 @@
+{
+  "name": "session-manager",
+  "version": "1.0.0",
+  "description": "Manage Claude Code sessions with a TUI - pin, delete, tag, and preview sessions",
+  "author": {
+    "name": "Harry Chung"
+  },
+  "license": "MIT"
+}
