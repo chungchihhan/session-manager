@@ -175,6 +175,7 @@ type Model struct {
 	showHelp        bool
 	showPreview     bool
 	showAllSessions bool // false = current dir only, true = all sessions
+	showAgents      bool // false = hide agent sessions, true = show all
 	statusMessage   string
 	selectedSession *session.Session
 	currentDir      string
@@ -220,6 +221,12 @@ func (m Model) loadSessions() tea.Msg {
 	if err != nil {
 		return errMsg{err}
 	}
+
+	// Filter out agent sessions unless showAgents is true
+	if !m.showAgents {
+		sessions = session.FilterAgents(sessions)
+	}
+
 	return sessionsLoadedMsg{sessions}
 }
 
@@ -589,14 +596,13 @@ func (m Model) renderList(height, width int) string {
 			pin = "📌"
 		}
 
-		name := truncateStr(s.Name, 30)
-		// Decode directory path for display (- back to /)
-		displayDir := session.DecodeDirPath(s.Directory)
-		dir := truncateStr(displayDir, 20)
+		name := truncateStr(s.Name, 35)
+		// Use the pre-computed display directory (short project name)
+		dir := truncateStr(s.DisplayDir, 25)
 		date := s.Modified.Format("01/02 15:04")
-		msgs := fmt.Sprintf("%3d msgs", s.MessageCount)
+		msgs := fmt.Sprintf("%4d", s.MessageCount)
 
-		line := fmt.Sprintf("%s %-30s │ %s │ %-20s │ %s",
+		line := fmt.Sprintf("%s %-35s │ %s │ %-25s │ %s",
 			pin, name, date, dir, msgs)
 
 		// Add tags

@@ -17,7 +17,8 @@ import (
 type Session struct {
 	ID           string
 	Path         string
-	Directory    string
+	Directory    string    // Raw encoded directory
+	DisplayDir   string    // Human-readable short directory name
 	Name         string
 	Created      time.Time
 	Modified     time.Time
@@ -25,6 +26,7 @@ type Session struct {
 	IsPinned     bool
 	Tags         []string
 	Preview      []string // First few messages for preview
+	IsAgent      bool     // True if this is a subagent session
 }
 
 // Message represents a single message in the transcript.
@@ -82,6 +84,31 @@ func DecodeDirPath(encoded string) string {
 	return strings.ReplaceAll(encoded, "-", "/")
 }
 
+// getDisplayDir returns a short, human-readable directory name.
+// For "/Users/harry/Developer/Personal/my-project" returns "my-project"
+// For longer paths, shows last 2 components like "Personal/my-project"
+func getDisplayDir(fullPath string) string {
+	// Remove leading slash and split
+	path := strings.TrimPrefix(fullPath, "/")
+	parts := strings.Split(path, "/")
+
+	if len(parts) == 0 {
+		return fullPath
+	}
+
+	// Return last component (project name)
+	if len(parts) == 1 {
+		return parts[0]
+	}
+
+	// For deeper paths, show last 2 components
+	if len(parts) >= 2 {
+		return parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	}
+
+	return parts[len(parts)-1]
+}
+
 // ListForCurrentDir returns sessions for the current directory only.
 func (m *Manager) ListForCurrentDir() ([]*Session, error) {
 	all, err := m.List()
@@ -105,6 +132,17 @@ func (m *Manager) ListForCurrentDir() ([]*Session, error) {
 	}
 
 	return filtered, nil
+}
+
+// FilterAgents removes agent sessions from a list.
+func FilterAgents(sessions []*Session) []*Session {
+	var filtered []*Session
+	for _, s := range sessions {
+		if !s.IsAgent {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
 }
 
 // List returns all sessions, sorted by pinned status then modified time.
@@ -158,15 +196,23 @@ func (m *Manager) parseSession(path string, info os.FileInfo) (*Session, error) 
 		relDir = dir
 	}
 
+	// Check if this is an agent session (starts with "agent-")
+	isAgent := strings.HasPrefix(sessionID, "agent-")
+
+	// Create human-readable display directory (just the project name)
+	displayDir := getDisplayDir(DecodeDirPath(relDir))
+
 	session := &Session{
-		ID:        sessionID,
-		Path:      path,
-		Directory: relDir,
-		Name:      sessionID[:min(8, len(sessionID))], // Default name: short ID
-		Created:   info.ModTime(),                     // Approximate
-		Modified:  info.ModTime(),
-		IsPinned:  m.metadata.IsPinned(sessionID),
-		Tags:      m.metadata.GetTags(sessionID),
+		ID:         sessionID,
+		Path:       path,
+		Directory:  relDir,
+		DisplayDir: displayDir,
+		Name:       sessionID[:min(8, len(sessionID))], // Default name: short ID
+		Created:    info.ModTime(),                     // Approximate
+		Modified:   info.ModTime(),
+		IsPinned:   m.metadata.IsPinned(sessionID),
+		Tags:       m.metadata.GetTags(sessionID),
+		IsAgent:    isAgent,
 	}
 
 	// Parse the file for more details
