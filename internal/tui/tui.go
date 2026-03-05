@@ -56,21 +56,22 @@ var (
 
 // keyMap defines keybindings.
 type keyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	Pin       key.Binding
-	Delete    key.Binding
-	Tag       key.Binding
-	Filter    key.Binding
-	Preview   key.Binding
-	Enter     key.Binding
-	Escape    key.Binding
-	Help      key.Binding
-	Quit      key.Binding
-	Confirm   key.Binding
-	PageUp    key.Binding
-	PageDown  key.Binding
-	ToggleAll key.Binding
+	Up           key.Binding
+	Down         key.Binding
+	Pin          key.Binding
+	Delete       key.Binding
+	Tag          key.Binding
+	Filter       key.Binding
+	Preview      key.Binding
+	Enter        key.Binding
+	Escape       key.Binding
+	Help         key.Binding
+	Quit         key.Binding
+	Confirm      key.Binding
+	PageUp       key.Binding
+	PageDown     key.Binding
+	ToggleAll    key.Binding
+	ToggleAgents key.Binding
 }
 
 var keys = keyMap{
@@ -134,18 +135,22 @@ var keys = keyMap{
 		key.WithKeys("a"),
 		key.WithHelp("a", "all/current dir"),
 	),
+	ToggleAgents: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "show/hide agents"),
+	),
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Pin, k.Delete, k.Filter, k.ToggleAll, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Pin, k.Delete, k.Filter, k.ToggleAll, k.ToggleAgents, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.PageUp, k.PageDown},
 		{k.Pin, k.Delete, k.Tag},
-		{k.Filter, k.Preview, k.Enter, k.ToggleAll},
-		{k.Help, k.Quit, k.Escape},
+		{k.Filter, k.Preview, k.Enter},
+		{k.ToggleAll, k.ToggleAgents, k.Help, k.Quit},
 	}
 }
 
@@ -175,7 +180,7 @@ type Model struct {
 	showHelp        bool
 	showPreview     bool
 	showAllSessions bool // false = current dir only, true = all sessions
-	showAgents      bool // false = hide agent sessions, true = show all
+	showAgents      bool // false = hide agent sessions, true = show them
 	statusMessage   string
 	selectedSession *session.Session
 	currentDir      string
@@ -221,12 +226,6 @@ func (m Model) loadSessions() tea.Msg {
 	if err != nil {
 		return errMsg{err}
 	}
-
-	// Filter out agent sessions unless showAgents is true
-	if !m.showAgents {
-		sessions = session.FilterAgents(sessions)
-	}
-
 	return sessionsLoadedMsg{sessions}
 }
 
@@ -420,6 +419,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.loadSessions
 
+	case key.Matches(msg, keys.ToggleAgents):
+		m.showAgents = !m.showAgents
+		if m.showAgents {
+			m.statusMessage = "Showing agent sessions"
+		} else {
+			m.statusMessage = "Hiding agent sessions"
+		}
+		m.applyFilter()
+		return m, nil
+
 	case key.Matches(msg, keys.Enter):
 		if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
 			s := m.filtered[m.cursor]
@@ -439,19 +448,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) applyFilter() {
 	filter := strings.ToLower(m.filterInput.Value())
-	if filter == "" {
-		m.filtered = m.sessions
-		return
-	}
 
 	var filtered []*session.Session
 	for _, s := range m.sessions {
-		if strings.Contains(strings.ToLower(s.Name), filter) ||
-			strings.Contains(strings.ToLower(s.ID), filter) ||
-			strings.Contains(strings.ToLower(s.Directory), filter) ||
-			containsTag(s.Tags, filter) {
-			filtered = append(filtered, s)
+		// Skip agent sessions if not showing them
+		if s.IsAgent && !m.showAgents {
+			continue
 		}
+
+		// Apply text filter
+		if filter != "" {
+			if !strings.Contains(strings.ToLower(s.Name), filter) &&
+				!strings.Contains(strings.ToLower(s.ID), filter) &&
+				!strings.Contains(strings.ToLower(s.Directory), filter) &&
+				!containsTag(s.Tags, filter) {
+				continue
+			}
+		}
+
+		filtered = append(filtered, s)
 	}
 	m.filtered = filtered
 
@@ -591,19 +606,34 @@ func (m Model) renderList(height, width int) string {
 		s := m.filtered[i]
 
 		// Build session line
-		pin := "  "
+		prefix := "  "
 		if s.IsPinned {
-			pin = "📌"
+			prefix = "📌"
+		} else if s.IsAgent {
+			prefix = "  └─" // Indent agent sessions
 		}
 
-		name := truncateStr(s.Name, 35)
-		// Use the pre-computed display directory (short project name)
-		dir := truncateStr(s.DisplayDir, 25)
+		name := truncateStr(s.Name, 30)
 		date := s.Modified.Format("01/02 15:04")
-		msgs := fmt.Sprintf("%4d", s.MessageCount)
+		msgs := fmt.Sprintf("%3d msgs", s.MessageCount)
 
-		line := fmt.Sprintf("%s %-35s │ %s │ %-25s │ %s",
-			pin, name, date, dir, msgs)
+		var line string
+		if m.showAllSessions {
+			// Show directory when viewing all sessions
+			displayDir := session.DecodeDirPath(s.Directory)
+			// Show more of the path - just the last 2 segments
+			dirParts := strings.Split(displayDir, "/")
+			if len(dirParts) > 2 {
+				displayDir = ".../" + strings.Join(dirParts[len(dirParts)-2:], "/")
+			}
+			dir := truncateStr(displayDir, 30)
+			line = fmt.Sprintf("%s %-30s │ %s │ %-30s │ %s",
+				prefix, name, date, dir, msgs)
+		} else {
+			// Hide directory when in current-dir mode (it's redundant)
+			line = fmt.Sprintf("%s %-40s │ %s │ %s",
+				prefix, name, date, msgs)
+		}
 
 		// Add tags
 		if len(s.Tags) > 0 {
@@ -624,6 +654,8 @@ func (m Model) renderList(height, width int) string {
 			line = selectedStyle.Render(line)
 		} else if s.IsPinned {
 			line = pinnedStyle.Render(line)
+		} else if s.IsAgent {
+			line = dimStyle.Render(line) // Dim agent sessions
 		} else {
 			line = normalStyle.Render(line)
 		}
