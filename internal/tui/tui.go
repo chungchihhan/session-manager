@@ -179,11 +179,11 @@ type Model struct {
 	mode            Mode
 	filterInput     textinput.Model
 	tagInput        textinput.Model
-	help            help.Model
-	showHelp        bool
-	showAllSessions bool // false = current dir only, true = all sessions
-	showAgents      bool // false = hide agent sessions, true = show them
-	statusMessage   string
+	help             help.Model
+	showHelp         bool
+	showAllSessions  bool            // false = current dir only, true = all sessions
+	expandedSessions map[string]bool // Set of session IDs with agents expanded
+	statusMessage    string
 	selectedSession *session.Session
 	currentDir      string
 }
@@ -199,14 +199,14 @@ func New(mgr *session.Manager, meta *metadata.Store) Model {
 	tagInput.CharLimit = 30
 
 	return Model{
-		manager:         mgr,
-		metadata:        meta,
-		help:            help.New(),
-		filterInput:     filterInput,
-		tagInput:        tagInput,
-		showAllSessions: false, // Default: current directory only
-		showAgents:      true,  // Default: show agent sessions
-		currentDir:      mgr.GetCurrentDir(),
+		manager:          mgr,
+		metadata:         meta,
+		help:             help.New(),
+		filterInput:      filterInput,
+		tagInput:         tagInput,
+		showAllSessions:  false,              // Default: current directory only
+		expandedSessions: make(map[string]bool),
+		currentDir:       mgr.GetCurrentDir(),
 	}
 }
 
@@ -439,13 +439,34 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadSessions
 
 	case key.Matches(msg, keys.ToggleAgents):
-		m.showAgents = !m.showAgents
-		if m.showAgents {
-			m.statusMessage = "Showing agent sessions"
-		} else {
-			m.statusMessage = "Hiding agent sessions"
+		if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
+			s := m.filtered[m.cursor]
+			if s.IsAgent {
+				// Can't expand agents of an agent
+				return m, nil
+			}
+			// Toggle this session's agents
+			if m.expandedSessions[s.ID] {
+				delete(m.expandedSessions, s.ID)
+				m.statusMessage = "Hidden agents for: " + s.Name
+			} else {
+				// Check if this session has any agents first
+				hasAgents := false
+				for _, sess := range m.sessions {
+					if sess.IsAgent && sess.Directory == s.Directory {
+						hasAgents = true
+						break
+					}
+				}
+				if hasAgents {
+					m.expandedSessions[s.ID] = true
+					m.statusMessage = "Showing agents for: " + s.Name
+				} else {
+					m.statusMessage = "No agents for this session"
+				}
+			}
+			m.applyFilter()
 		}
-		m.applyFilter()
 		return m, nil
 
 	case key.Matches(msg, keys.Enter):
@@ -468,11 +489,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) applyFilter() {
 	filter := strings.ToLower(m.filterInput.Value())
 
+	// Build set of directories that have expanded sessions
+	expandedDirs := make(map[string]bool)
+	for sessionID := range m.expandedSessions {
+		for _, s := range m.sessions {
+			if s.ID == sessionID {
+				expandedDirs[s.Directory] = true
+				break
+			}
+		}
+	}
+
 	var filtered []*session.Session
 	for _, s := range m.sessions {
-		// Skip agent sessions if not showing them
-		if s.IsAgent && !m.showAgents {
-			continue
+		// Handle agent sessions - only show if parent session is expanded
+		if s.IsAgent {
+			if !expandedDirs[s.Directory] {
+				continue
+			}
 		}
 
 		// Apply text filter
@@ -606,6 +640,14 @@ func (m Model) renderList(height, width int) string {
 	for i := start; i < end; i++ {
 		s := m.filtered[i]
 
+		// Indent for agent sessions
+		indent := ""
+		metaIndent := "  "
+		if s.IsAgent {
+			indent = "    "
+			metaIndent = "      "
+		}
+
 		// Build session line - Claude Code style
 		cursor := "  "
 		if i == m.cursor {
@@ -613,7 +655,7 @@ func (m Model) renderList(height, width int) string {
 		}
 
 		// Session summary (first part of name, truncated)
-		summary := truncateStr(s.Name, width-20)
+		summary := truncateStr(s.Name, width-20-len(indent))
 
 		// Relative time
 		relTime := relativeTime(s.Modified)
@@ -623,16 +665,16 @@ func (m Model) renderList(height, width int) string {
 
 		// Apply style - consistent alignment
 		if i == m.cursor {
-			b.WriteString(selectedStyle.Render(cursor + summary))
+			b.WriteString(indent + selectedStyle.Render(cursor+summary))
 		} else if s.IsPinned {
-			b.WriteString(pinnedStyle.Render(cursor + summary))
+			b.WriteString(indent + pinnedStyle.Render(cursor+summary))
 		} else if s.IsAgent {
-			b.WriteString(dimStyle.Render(cursor + summary))
+			b.WriteString(indent + dimStyle.Render(cursor+summary))
 		} else {
-			b.WriteString(normalStyle.Render(cursor + summary))
+			b.WriteString(indent + normalStyle.Render(cursor+summary))
 		}
 		b.WriteString("\n")
-		b.WriteString("  " + dimStyle.Render(meta))
+		b.WriteString(metaIndent + dimStyle.Render(meta))
 		b.WriteString("\n\n")
 	}
 
