@@ -101,14 +101,13 @@ func (m *Manager) ListForCurrentDir() ([]*Session, error) {
 		return all, nil
 	}
 
-	// Encode the current directory path like Claude Code does
-	encodedDir := encodeDirPath(m.currentDir)
-
 	var filtered []*Session
 	for _, s := range all {
-		// Match if the session's directory matches the encoded current dir
-		if s.Directory == encodedDir || strings.HasPrefix(s.Directory, encodedDir) {
-			filtered = append(filtered, s)
+		// Compare using actual Cwd from session file (more reliable than encoded paths)
+		if s.Cwd != "" {
+			if s.Cwd == m.currentDir || strings.HasPrefix(s.Cwd, m.currentDir+"/") {
+				filtered = append(filtered, s)
+			}
 		}
 	}
 
