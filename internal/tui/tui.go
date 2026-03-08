@@ -41,7 +41,8 @@ var (
 	tagStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("86")).
 			Background(lipgloss.AdaptiveColor{Light: "254", Dark: "236"}).
-			Padding(0, 1)
+			Padding(0, 1).
+			Bold(true)
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "250"})
@@ -58,6 +59,7 @@ type keyMap struct {
 	Pin          key.Binding
 	Delete       key.Binding
 	Tag          key.Binding
+	RemoveTag    key.Binding
 	Filter       key.Binding
 	Right        key.Binding
 	Left         key.Binding
@@ -74,35 +76,39 @@ type keyMap struct {
 
 var keys = keyMap{
 	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
+		key.WithKeys("up", "k", "K"),
 		key.WithHelp("↑/k", "up"),
 	),
 	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
+		key.WithKeys("down", "j", "J"),
 		key.WithHelp("↓/j", "down"),
 	),
 	Pin: key.NewBinding(
-		key.WithKeys("p"),
+		key.WithKeys("p", "P"),
 		key.WithHelp("p", "pin/unpin"),
 	),
 	Delete: key.NewBinding(
-		key.WithKeys("d", "x"),
+		key.WithKeys("d", "D", "x", "X"),
 		key.WithHelp("d", "delete"),
 	),
 	Tag: key.NewBinding(
-		key.WithKeys("t"),
+		key.WithKeys("t", "T"),
 		key.WithHelp("t", "add tag"),
+	),
+	RemoveTag: key.NewBinding(
+		key.WithKeys("u", "U"),
+		key.WithHelp("u", "manage tags"),
 	),
 	Filter: key.NewBinding(
 		key.WithKeys("/"),
 		key.WithHelp("/", "filter"),
 	),
 	Right: key.NewBinding(
-		key.WithKeys("right", "l"),
+		key.WithKeys("right", "l", "L"),
 		key.WithHelp("→", "preview"),
 	),
 	Left: key.NewBinding(
-		key.WithKeys("left", "h"),
+		key.WithKeys("left", "h", "H"),
 		key.WithHelp("←", "back"),
 	),
 	Enter: key.NewBinding(
@@ -118,11 +124,11 @@ var keys = keyMap{
 		key.WithHelp("?", "help"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
+		key.WithKeys("q", "Q", "ctrl+c"),
 		key.WithHelp("q", "quit"),
 	),
 	Confirm: key.NewBinding(
-		key.WithKeys("y"),
+		key.WithKeys("y", "Y"),
 		key.WithHelp("y", "confirm"),
 	),
 	PageUp: key.NewBinding(
@@ -134,11 +140,11 @@ var keys = keyMap{
 		key.WithHelp("pgdn", "page down"),
 	),
 	ToggleAll: key.NewBinding(
-		key.WithKeys("a"),
+		key.WithKeys("a", "A"),
 		key.WithHelp("a", "all/current dir"),
 	),
 	ToggleAgents: key.NewBinding(
-		key.WithKeys("s"),
+		key.WithKeys("s", "S"),
 		key.WithHelp("s", "show/hide agents"),
 	),
 }
@@ -164,6 +170,7 @@ const (
 	ModeFilter
 	ModeConfirmDelete
 	ModeAddTag
+	ModeRemoveTag
 	ModePreview
 )
 
@@ -190,6 +197,7 @@ type Model struct {
 	previewSessionID string                   // ID of cached preview session
 	selectedSession *session.Session
 	currentDir      string
+	tagCursor       int // For selecting tag to remove
 
 	// Resume info - set when user selects a session with Enter
 	ResumeSessionID    string // Session ID to resume
@@ -356,6 +364,53 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ModeRemoveTag:
+		if m.selectedSession == nil || len(m.selectedSession.Tags) == 0 {
+			m.mode = ModeNormal
+			return m, nil
+		}
+		switch {
+		case key.Matches(msg, keys.Escape):
+			m.mode = ModeNormal
+			m.selectedSession = nil
+			m.tagCursor = 0
+		case key.Matches(msg, keys.Left), key.Matches(msg, keys.Up):
+			if m.tagCursor > 0 {
+				m.tagCursor--
+			}
+		case key.Matches(msg, keys.Right), key.Matches(msg, keys.Down):
+			if m.tagCursor < len(m.selectedSession.Tags)-1 {
+				m.tagCursor++
+			}
+		case key.Matches(msg, keys.Delete): // D to delete
+			tag := m.selectedSession.Tags[m.tagCursor]
+			if err := m.metadata.RemoveTag(m.selectedSession.ID, tag); err != nil {
+				m.statusMessage = "Error removing tag: " + err.Error()
+			} else {
+				m.statusMessage = "Removed tag: " + tag
+			}
+			m.mode = ModeNormal
+			m.selectedSession = nil
+			m.tagCursor = 0
+			return m, m.loadSessions
+		case key.Matches(msg, keys.Enter): // Enter to edit
+			tag := m.selectedSession.Tags[m.tagCursor]
+			// Switch to add tag mode with the current tag value for editing
+			m.tagInput.SetValue(tag)
+			// Remove the old tag first, then add the new one when done
+			if err := m.metadata.RemoveTag(m.selectedSession.ID, tag); err != nil {
+				m.statusMessage = "Error: " + err.Error()
+				m.mode = ModeNormal
+				m.selectedSession = nil
+				m.tagCursor = 0
+				return m, nil
+			}
+			m.mode = ModeAddTag
+			m.tagInput.Focus()
+			return m, textinput.Blink
+		}
+		return m, nil
+
 	case ModePreview:
 		switch msg.String() {
 		case "esc", "left", "h", "q", "backspace":
@@ -462,6 +517,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedSession = m.filtered[m.cursor]
 			m.mode = ModeAddTag
 			m.tagInput.Focus()
+		}
+
+	case key.Matches(msg, keys.RemoveTag):
+		if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
+			s := m.filtered[m.cursor]
+			if len(s.Tags) > 0 {
+				m.selectedSession = s
+				m.tagCursor = 0
+				m.mode = ModeRemoveTag
+			} else {
+				m.statusMessage = "No tags to remove"
+			}
 		}
 
 	case key.Matches(msg, keys.Filter):
@@ -658,13 +725,27 @@ func (m Model) View() string {
 		b.WriteString(lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Bold(true).
-			Render(fmt.Sprintf("Delete '%s'? (y/n)", m.selectedSession.Name)))
+			Render("Delete this session? (y/n)"))
 	}
 
 	if m.mode == ModeAddTag && m.selectedSession != nil {
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("Add tag to '%s': ", m.selectedSession.Name))
+		b.WriteString("Add tag: ")
 		b.WriteString(m.tagInput.View())
+	}
+
+	if m.mode == ModeRemoveTag && m.selectedSession != nil && len(m.selectedSession.Tags) > 0 {
+		b.WriteString("\n")
+		b.WriteString("Manage tags: ")
+		for i, tag := range m.selectedSession.Tags {
+			if i == m.tagCursor {
+				b.WriteString(selectedStyle.Render("[" + tag + "]"))
+			} else {
+				b.WriteString(tagStyle.Render(tag))
+			}
+			b.WriteString(" ")
+		}
+		b.WriteString(dimStyle.Render("(←/→ select, D delete, Enter edit, Esc cancel)"))
 	}
 
 	// Help bar
@@ -673,10 +754,10 @@ func (m Model) View() string {
 		"↑↓ navigate",
 		"→ preview",
 		"A all/current",
-		"S agents",
 		"P pin",
+		"T tag",
+		"U untag",
 		"D delete",
-		"/ filter",
 	}
 	b.WriteString(dimStyle.Render(strings.Join(helpItems, " · ")))
 
@@ -700,6 +781,13 @@ func (m Model) renderList(height, width int) string {
 		end = len(m.filtered)
 	}
 
+	// Badge styles - match tagStyle format
+	pinnedBadgeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "208", Dark: "214"}).
+		Background(lipgloss.AdaptiveColor{Light: "254", Dark: "236"}).
+		Padding(0, 1).
+		Bold(true)
+
 	for i := start; i < end; i++ {
 		s := m.filtered[i]
 
@@ -711,6 +799,19 @@ func (m Model) renderList(height, width int) string {
 			metaIndent = "      "
 		}
 
+		// Build badges line (pinned + tags)
+		var badges []string
+		if s.IsPinned {
+			badges = append(badges, pinnedBadgeStyle.Render("Pinned"))
+		}
+		for _, tag := range s.Tags {
+			badges = append(badges, tagStyle.Render(tag))
+		}
+		if len(badges) > 0 {
+			b.WriteString(metaIndent + strings.Join(badges, " "))
+			b.WriteString("\n")
+		}
+
 		// Build session line - Claude Code style
 		cursor := "  "
 		if i == m.cursor {
@@ -719,12 +820,6 @@ func (m Model) renderList(height, width int) string {
 
 		// Session summary (first part of name, truncated to fit screen)
 		summary := truncateStr(s.Name, width-4-len(indent)) // 4 = cursor(2) + right margin(2)
-
-		// Relative time
-		relTime := relativeTime(s.Modified)
-
-		// Message count
-		meta := fmt.Sprintf("%s · %d messages", relTime, s.MessageCount)
 
 		// Apply style - consistent alignment
 		if i == m.cursor {
@@ -737,6 +832,16 @@ func (m Model) renderList(height, width int) string {
 			b.WriteString(indent + normalStyle.Render(cursor+summary))
 		}
 		b.WriteString("\n")
+
+		// Meta line: time · messages · path
+		relTime := relativeTime(s.Modified)
+		displayPath := s.Cwd
+		if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(displayPath, home) {
+			displayPath = "~" + strings.TrimPrefix(displayPath, home)
+		}
+		displayPath = truncateStr(displayPath, 30)
+		meta := fmt.Sprintf("%s · %d msgs · %s", relTime, s.MessageCount, displayPath)
+
 		b.WriteString(metaIndent + dimStyle.Render(meta))
 		b.WriteString("\n\n")
 	}
