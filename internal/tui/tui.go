@@ -184,6 +184,10 @@ type Model struct {
 	showAllSessions  bool            // false = current dir only, true = all sessions
 	expandedSessions map[string]bool // Set of session IDs with agents expanded
 	statusMessage    string
+	previewScroll    int                      // Scroll offset in preview mode
+	previewCursor    int                      // Current highlighted message in preview
+	previewCache     []session.PreviewMessage // Cached preview messages
+	previewSessionID string                   // ID of cached preview session
 	selectedSession *session.Session
 	currentDir      string
 }
@@ -343,19 +347,49 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ModePreview:
-		switch {
-		case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Left):
+		switch msg.String() {
+		case "esc", "left", "h", "q", "backspace":
 			m.mode = ModeNormal
-		case key.Matches(msg, keys.Quit):
-			return m, tea.Quit
-		case key.Matches(msg, keys.Enter):
+			m.previewScroll = 0
+			m.previewCursor = 0
+			m.previewCache = nil
+			m.previewSessionID = ""
+			return m, nil
+		case "enter":
 			if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
 				s := m.filtered[m.cursor]
 				fmt.Printf("\n\nTo resume this session:\n  claude --resume %s\n\n", s.ID)
 				return m, tea.Quit
 			}
+			return m, nil
+		case "ctrl+c":
+			return m, tea.Quit
+		case "up", "k":
+			if m.previewCursor > 0 {
+				m.previewCursor--
+				// Scroll up if cursor goes above visible area
+				if m.previewCursor < m.previewScroll {
+					m.previewScroll = m.previewCursor
+				}
+			}
+			return m, nil
+		case "down", "j":
+			if m.previewCursor < len(m.previewCache)-1 {
+				m.previewCursor++
+				// Scroll down if cursor goes below visible area
+				previewLines := m.height - 12
+				if previewLines < 5 {
+					previewLines = 5
+				}
+				if m.previewCursor >= m.previewScroll+previewLines {
+					m.previewScroll = m.previewCursor - previewLines + 1
+				}
+			}
+			return m, nil
+		default:
+			// Ignore other keys but don't get stuck
+			return m, nil
 		}
-		return m, nil
 	}
 
 	// Normal mode
@@ -423,6 +457,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Right):
 		if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
+			s := m.filtered[m.cursor]
+			// Load preview cache
+			preview, _ := m.manager.GetPreview(s.ID, 100)
+			m.previewCache = preview
+			m.previewSessionID = s.ID
+			m.previewScroll = 0
+			m.previewCursor = 0
 			m.mode = ModePreview
 		}
 
@@ -654,8 +695,8 @@ func (m Model) renderList(height, width int) string {
 			cursor = "▶ "
 		}
 
-		// Session summary (first part of name, truncated)
-		summary := truncateStr(s.Name, width-20-len(indent))
+		// Session summary (first part of name, truncated to fit screen)
+		summary := truncateStr(s.Name, width-4-len(indent)) // 4 = cursor(2) + right margin(2)
 
 		// Relative time
 		relTime := relativeTime(s.Modified)
@@ -685,71 +726,171 @@ func (m Model) renderFullPreview() string {
 	s := m.filtered[m.cursor]
 
 	var b strings.Builder
+	padding := "  " // Left padding
 
-	// Title bar
-	b.WriteString(titleStyle.Render("Session Preview"))
+	// Header with session name
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("205")).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderBottom(true).
+		BorderForeground(lipgloss.AdaptiveColor{Light: "240", Dark: "60"}).
+		Width(m.width - 6).
+		PaddingBottom(1)
+
+	b.WriteString(padding + headerStyle.Render(s.Name))
 	b.WriteString("\n\n")
 
-	// Session name
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render(s.Name))
-	b.WriteString("\n\n")
-
-	// Metadata
-	b.WriteString(dimStyle.Render(fmt.Sprintf("ID: %s", s.ID)))
-	b.WriteString("\n")
-
+	// Directory path
 	displayDir := session.DecodeDirPath(s.Directory)
-	b.WriteString(dimStyle.Render(fmt.Sprintf("Path: %s", displayDir)))
+	b.WriteString(padding + dimStyle.Render(displayDir))
 	b.WriteString("\n")
 
-	b.WriteString(dimStyle.Render(fmt.Sprintf("Messages: %d", s.MessageCount)))
-	b.WriteString("\n")
-
-	b.WriteString(dimStyle.Render(fmt.Sprintf("Modified: %s", relativeTime(s.Modified))))
-	b.WriteString("\n")
-
-	if s.IsAgent {
-		b.WriteString(dimStyle.Render("Type: Agent sub-session"))
-		b.WriteString("\n")
-	}
-
+	// Tags
 	if len(s.Tags) > 0 {
-		b.WriteString("Tags: ")
+		b.WriteString(padding)
 		for _, t := range s.Tags {
 			b.WriteString(tagStyle.Render(t) + " ")
 		}
 		b.WriteString("\n")
 	}
 
-	// Resume command
-	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("82")).Render("Resume Command:"))
-	b.WriteString("\n")
-	resumeCmd := fmt.Sprintf("claude --resume %s", s.ID)
-	b.WriteString(commandStyle.Render(resumeCmd))
+	// Conversation preview section
 	b.WriteString("\n")
 
-	// Preview content
-	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Conversation Preview:"))
-	b.WriteString("\n\n")
-
-	previewLines := m.height - 18
+	previewLines := m.height - 12
 	if previewLines < 5 {
 		previewLines = 5
 	}
 
-	preview, err := m.manager.GetPreview(s.ID, previewLines)
-	if err == nil {
-		for _, line := range preview {
-			b.WriteString(dimStyle.Render(line))
-			b.WriteString("\n")
+	// Styles for different message types - Claude Code style
+	userStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "0", Dark: "255"}).
+		Bold(true)
+	assistantStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "55", Dark: "141"})
+	summaryStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "245"})
+	bulletStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "55", Dark: "141"})
+
+	// Use cached preview data
+	if len(m.previewCache) > 0 {
+		// Calculate visible slice based on scroll
+		start := m.previewScroll
+		if start >= len(m.previewCache) {
+			start = len(m.previewCache) - 1
 		}
+		if start < 0 {
+			start = 0
+		}
+		end := start + previewLines
+		if end > len(m.previewCache) {
+			end = len(m.previewCache)
+		}
+
+		// Highlight background color
+		highlightBg := lipgloss.AdaptiveColor{Light: "254", Dark: "236"}
+		maxWidth := m.width - 8 // Leave padding on both sides
+
+		for i, msg := range m.previewCache[start:end] {
+			actualIndex := start + i
+			isSelected := actualIndex == m.previewCursor
+
+			// Build the line based on role
+			var prefix, text string
+			var prefixStyle, textStyle lipgloss.Style
+
+			switch msg.Role {
+			case "user":
+				prefix = "> "
+				text = msg.Text
+				prefixStyle = userStyle
+				textStyle = userStyle
+			case "assistant":
+				prefix = "⏺ "
+				text = msg.Text
+				prefixStyle = bulletStyle
+				textStyle = assistantStyle
+			case "summary":
+				prefix = "  ⎿ "
+				text = msg.Text
+				prefixStyle = summaryStyle
+				textStyle = summaryStyle
+			default:
+				prefix = ""
+				text = msg.Text
+				prefixStyle = dimStyle
+				textStyle = dimStyle
+			}
+
+			// Truncate text to fit within maxWidth (leaving room for prefix and right padding)
+			textMaxLen := maxWidth - len(prefix) - 1 // 1 char right padding
+			if len(text) > textMaxLen {
+				text = text[:textMaxLen-1] + "..."
+			}
+
+			// Render the line
+			if isSelected {
+				// Create highlighted versions of the styles
+				highlightedPrefix := prefixStyle.Background(highlightBg)
+				highlightedText := textStyle.Background(highlightBg)
+
+				line := highlightedPrefix.Render(prefix) + highlightedText.Render(text)
+				// Pad to full width with background
+				lineLen := len(prefix) + len(text)
+				if lineLen < maxWidth {
+					padStyle := lipgloss.NewStyle().Background(highlightBg)
+					line += padStyle.Render(strings.Repeat(" ", maxWidth-lineLen))
+				}
+				b.WriteString(padding + line)
+			} else {
+				line := prefixStyle.Render(prefix) + textStyle.Render(text)
+				b.WriteString(padding + line)
+			}
+
+			if msg.Role == "user" || msg.Role == "assistant" {
+				b.WriteString("\n\n")
+			} else {
+				b.WriteString("\n")
+			}
+		}
+	} else {
+		b.WriteString(padding + dimStyle.Render("No preview available"))
+		b.WriteString("\n")
 	}
 
-	// Help bar
+	// Scroll indicator
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("← back · Enter to resume · Esc to cancel"))
+	scrollStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "25", Dark: "75"})
+	if len(m.previewCache) > previewLines {
+		end := m.previewScroll + previewLines
+		if end > len(m.previewCache) {
+			end = len(m.previewCache)
+		}
+		scrollText := fmt.Sprintf("▲ %d-%d of %d ▼", m.previewScroll+1, end, len(m.previewCache))
+		b.WriteString(padding + scrollStyle.Render(scrollText))
+		b.WriteString("\n")
+	}
+
+	// Metadata at bottom
+	metaStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "245"})
+	metaItems := []string{
+		fmt.Sprintf("%d messages", s.MessageCount),
+		relativeTime(s.Modified),
+	}
+	if s.IsAgent {
+		metaItems = append(metaItems, "agent")
+	}
+	b.WriteString(padding + metaStyle.Render(strings.Join(metaItems, " · ")))
+
+	// Help bar at bottom
+	b.WriteString("\n\n")
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "240", Dark: "243"})
+	b.WriteString(padding + helpStyle.Render("← back  ·  ↑↓ scroll  ·  Enter resume"))
 
 	return b.String()
 }
@@ -765,6 +906,38 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// wrapText wraps text to fit within maxWidth characters
+func wrapText(s string, maxWidth int) string {
+	if maxWidth <= 0 || len(s) <= maxWidth {
+		return s
+	}
+
+	var result strings.Builder
+	words := strings.Fields(s)
+	lineLen := 0
+
+	for i, word := range words {
+		wordLen := len(word)
+		if lineLen+wordLen+1 > maxWidth && lineLen > 0 {
+			result.WriteString("\n")
+			lineLen = 0
+		}
+		if lineLen > 0 {
+			result.WriteString(" ")
+			lineLen++
+		}
+		result.WriteString(word)
+		lineLen += wordLen
+
+		// Safety check for very long words
+		if i < len(words)-1 && lineLen >= maxWidth {
+			result.WriteString("\n")
+			lineLen = 0
+		}
+	}
+	return result.String()
 }
 
 // relativeTime returns a human-readable relative time string

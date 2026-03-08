@@ -23,9 +23,9 @@ type Session struct {
 	Modified     time.Time
 	MessageCount int
 	IsPinned     bool
-	IsAgent      bool     // True if this is a sub-agent session
+	IsAgent      bool             // True if this is a sub-agent session
 	Tags         []string
-	Preview      []string // First few messages for preview
+	Preview      []PreviewMessage // First few messages for preview
 }
 
 // Message represents a single message in the transcript.
@@ -36,6 +36,12 @@ type Message struct {
 		Content any    `json:"content"`
 	} `json:"message"`
 	Summary string `json:"summary"`
+}
+
+// PreviewMessage represents a message for preview display.
+type PreviewMessage struct {
+	Role string // "user", "assistant", or "summary"
+	Text string
 }
 
 // Manager handles session operations.
@@ -200,8 +206,8 @@ func (m *Manager) parseSession(path string, info os.FileInfo) (*Session, error) 
 
 			// Collect preview messages
 			if len(session.Preview) < previewLines {
-				preview := extractPreviewText(msg)
-				if preview != "" {
+				preview := extractPreviewMessage(msg)
+				if preview.Text != "" {
 					session.Preview = append(session.Preview, preview)
 				}
 			}
@@ -239,31 +245,56 @@ func extractMessageText(msg Message) string {
 	return ""
 }
 
-func extractPreviewText(msg Message) string {
+func extractPreviewMessage(msg Message) PreviewMessage {
+	// Check for summary first (but filter out system/error messages)
 	if msg.Summary != "" {
-		return truncate(msg.Summary, 80)
+		// Skip summaries that look like system messages
+		lower := strings.ToLower(msg.Summary)
+		if strings.Contains(lower, "no conversations") ||
+			strings.Contains(lower, "error") ||
+			strings.Contains(lower, "failed") {
+			return PreviewMessage{}
+		}
+		return PreviewMessage{
+			Role: "summary",
+			Text: truncate(msg.Summary, 500),
+		}
+	}
+
+	role := msg.Message.Role
+	if role == "" {
+		return PreviewMessage{}
 	}
 
 	if msg.Message.Content == nil {
-		return ""
+		return PreviewMessage{}
 	}
 
-	// Handle different content types
+	// Handle different content types - use longer limit for preview display
+	var text string
 	switch content := msg.Message.Content.(type) {
 	case string:
-		return truncate(content, 80)
+		text = truncate(content, 500)
 	case []any:
 		// Array of content blocks
 		for _, block := range content {
 			if m, ok := block.(map[string]any); ok {
-				if text, ok := m["text"].(string); ok {
-					return truncate(text, 80)
+				if t, ok := m["text"].(string); ok {
+					text = truncate(t, 500)
+					break
 				}
 			}
 		}
 	}
 
-	return ""
+	if text == "" {
+		return PreviewMessage{}
+	}
+
+	return PreviewMessage{
+		Role: role,
+		Text: text,
+	}
 }
 
 func truncate(s string, maxLen int) string {
@@ -330,7 +361,7 @@ func (m *Manager) Delete(sessionID string) error {
 }
 
 // GetPreview returns full preview content for a session.
-func (m *Manager) GetPreview(sessionID string, maxLines int) ([]string, error) {
+func (m *Manager) GetPreview(sessionID string, maxLines int) ([]PreviewMessage, error) {
 	session, err := m.Find(sessionID)
 	if err != nil {
 		return nil, err
@@ -342,26 +373,21 @@ func (m *Manager) GetPreview(sessionID string, maxLines int) ([]string, error) {
 	}
 	defer file.Close()
 
-	var lines []string
+	var messages []PreviewMessage
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
-	for scanner.Scan() && len(lines) < maxLines {
+	for scanner.Scan() && len(messages) < maxLines {
 		var msg Message
 		if err := json.Unmarshal([]byte(scanner.Text()), &msg); err != nil {
 			continue
 		}
 
-		role := msg.Message.Role
-		if role == "" {
-			role = msg.Type
-		}
-
-		preview := extractPreviewText(msg)
-		if preview != "" {
-			lines = append(lines, role+": "+preview)
+		preview := extractPreviewMessage(msg)
+		if preview.Text != "" {
+			messages = append(messages, preview)
 		}
 	}
 
-	return lines, nil
+	return messages, nil
 }
