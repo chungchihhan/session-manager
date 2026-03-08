@@ -1,4 +1,4 @@
-# Claude Code Session Manager
+# Super Resume
 
 A TUI plugin for managing Claude Code sessions - pin, delete, tag, and preview sessions.
 
@@ -22,15 +22,15 @@ A TUI plugin for managing Claude Code sessions - pin, delete, tag, and preview s
 
 ```bash
 # Clone the repository
-git clone https://github.com/harrychung/session-manager.git
-cd session-manager
+git clone https://github.com/harrychung/super-resume.git
+cd super-resume
 
 # Build the binary
 make build
 
 # Or manually:
 go mod tidy
-go build -o bin/session-manager ./cmd/session-manager
+go build -o bin/super-resume ./cmd/super-resume
 ```
 
 ## Usage with Claude Code
@@ -39,7 +39,7 @@ go build -o bin/session-manager ./cmd/session-manager
 
 ```bash
 # Add as a plugin directory
-claude --plugin-dir ~/Developer/Personal/session-manager
+claude --plugin-dir ~/Developer/Personal/super-resume
 ```
 
 Then use the skills:
@@ -52,14 +52,14 @@ Then use the skills:
 
 ```bash
 # Launch TUI
-./bin/session-manager
+./bin/super-resume
 
 # CLI commands
-./bin/session-manager list
-./bin/session-manager pin <session-id>
-./bin/session-manager unpin <session-id>
-./bin/session-manager delete <session-id>
-./bin/session-manager tag <session-id> <tag>
+./bin/super-resume list
+./bin/super-resume pin <session-id>
+./bin/super-resume unpin <session-id>
+./bin/super-resume delete <session-id>
+./bin/super-resume tag <session-id> <tag>
 ```
 
 ## TUI Keyboard Shortcuts

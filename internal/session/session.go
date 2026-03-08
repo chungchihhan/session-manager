@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/harrychung/session-manager/internal/metadata"
+	"github.com/harrychung/super-resume/internal/metadata"
 )
 
 // Session represents a Claude Code session.

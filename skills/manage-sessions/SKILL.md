@@ -39,5 +39,5 @@ Launch an interactive terminal interface for managing Claude Code sessions.
 Launch the TUI:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/session-manager
+${CLAUDE_PLUGIN_ROOT}/bin/super-resume
 ```

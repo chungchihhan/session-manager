@@ -19,7 +19,7 @@ Add tag to session: $ARGUMENTS
 2. Run the tag command:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/session-manager tag $ARGUMENTS
+${CLAUDE_PLUGIN_ROOT}/bin/super-resume tag $ARGUMENTS
 ```
 
 3. Confirm the tag was added

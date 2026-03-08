@@ -20,7 +20,7 @@ If no session is specified, pin the current session using CLAUDE_SESSION_ID.
 1. Run the pin command:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/session-manager pin "$ARGUMENTS"
+${CLAUDE_PLUGIN_ROOT}/bin/super-resume pin "$ARGUMENTS"
 ```
 
 2. Confirm the session was pinned successfully.

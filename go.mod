@@ -1,4 +1,4 @@
-module github.com/harrychung/session-manager
+module github.com/harrychung/super-resume
 
 go 1.21
 

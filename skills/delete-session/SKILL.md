@@ -19,7 +19,7 @@ Delete the session: $ARGUMENTS
 2. Run the deletion command:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/session-manager delete "$ARGUMENTS"
+${CLAUDE_PLUGIN_ROOT}/bin/super-resume delete "$ARGUMENTS"
 ```
 
 3. Verify the session was deleted

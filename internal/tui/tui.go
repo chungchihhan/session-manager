@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/harrychung/session-manager/internal/metadata"
-	"github.com/harrychung/session-manager/internal/session"
+	"github.com/harrychung/super-resume/internal/metadata"
+	"github.com/harrychung/super-resume/internal/session"
 )
 
 // Styles - using AdaptiveColor for light/dark background support
@@ -358,7 +358,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
 				s := m.filtered[m.cursor]
-				fmt.Printf("\n\nTo resume this session:\n  claude --resume %s\n\n", s.ID)
+				// Show which message was selected (1-indexed for user display)
+				msgPos := m.previewCursor + 1
+				totalMsgs := len(m.previewCache)
+				fmt.Printf("\n\nTo resume this session (at message %d/%d):\n  claude --resume %s\n\n", msgPos, totalMsgs, s.ID)
 				return m, tea.Quit
 			}
 			return m, nil
@@ -519,9 +522,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, keys.Escape):
-		m.filterInput.SetValue("")
-		m.applyFilter()
-		m.statusMessage = ""
+		// If filter is active, clear it; otherwise quit
+		if m.filterInput.Value() != "" {
+			m.filterInput.SetValue("")
+			m.applyFilter()
+			m.statusMessage = ""
+		} else {
+			return m, tea.Quit
+		}
 	}
 
 	return m, nil

@@ -1,4 +1,4 @@
-// session-manager is a TUI for managing Claude Code sessions.
+// super-resume is a TUI for managing Claude Code sessions.
 package main
 
 import (
@@ -6,9 +6,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/harrychung/session-manager/internal/metadata"
-	"github.com/harrychung/session-manager/internal/session"
-	"github.com/harrychung/session-manager/internal/tui"
+	"github.com/harrychung/super-resume/internal/metadata"
+	"github.com/harrychung/super-resume/internal/session"
+	"github.com/harrychung/super-resume/internal/tui"
 )
 
 func main() {
@@ -78,7 +78,7 @@ func handleCommand(args []string) error {
 		printHelp()
 		return nil
 	default:
-		return fmt.Errorf("unknown command: %s\nRun 'session-manager help' for usage", cmd)
+		return fmt.Errorf("unknown command: %s\nRun 'super-resume help' for usage", cmd)
 	}
 }
 
@@ -151,7 +151,7 @@ func cmdDelete(mgr *session.Manager, args []string) error {
 
 func cmdTag(meta *metadata.Store, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: session-manager tag <session-id> <tag>")
+		return fmt.Errorf("usage: super-resume tag <session-id> <tag>")
 	}
 
 	sessionID := args[0]
@@ -225,8 +225,8 @@ func printHelp() {
 	fmt.Println(`Claude Code Session Manager
 
 USAGE:
-    session-manager              Launch interactive TUI
-    session-manager <command>    Run a command
+    super-resume              Launch interactive TUI
+    super-resume <command>    Run a command
 
 COMMANDS:
     pin [session]     Pin a session (uses CLAUDE_SESSION_ID if not specified)
