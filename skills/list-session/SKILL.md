@@ -20,7 +20,9 @@ List sessions with arguments: $ARGUMENTS
    - `-N` = limit to N results (e.g., `-10`)
    - Default: current directory, 5 results
 
-2. Run the list command with `--json`:
+2. Note the current session ID: `$CLAUDE_SESSION_ID` (this is the session you're in right now)
+
+3. Run the list command with `--json`:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/bin/super-resume list --json [parsed flags]
@@ -45,6 +47,7 @@ ${CLAUDE_PLUGIN_ROOT}/bin/super-resume list --json [parsed flags]
 - Tags column: show "-" if no tags, otherwise comma-separated
 - Time column: format as "Mon DD HH:MM" (e.g., "Mar 09 14:30")
 - Show 📌 emoji for pinned sessions, empty for unpinned
+- **Highlight current session**: If a session's ID matches `$CLAUDE_SESSION_ID`, add " ← current" after the row
 
 4. After the table, show:
 

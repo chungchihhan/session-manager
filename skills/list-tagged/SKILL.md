@@ -20,7 +20,9 @@ List sessions with tag: $ARGUMENTS
    - `-N` = limit to N results (e.g., `-10`)
    - Default: 5 results from all directories
 
-2. Run the list command with `--json --tagged <tag> -a`:
+2. Note the current session ID: `$CLAUDE_SESSION_ID` (this is the session you're in right now)
+
+3. Run the list command with `--json --tagged <tag> -a`:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/bin/super-resume list --json --tagged <tag> -a [limit flag]
@@ -44,6 +46,7 @@ ${CLAUDE_PLUGIN_ROOT}/bin/super-resume list --json --tagged <tag> -a [limit flag
 - Tags column: show "-" if no tags, otherwise comma-separated
 - Time column: format as "Mon DD HH:MM" (e.g., "Mar 09 14:30")
 - Show 📌 emoji for pinned sessions, empty for unpinned
+- **Highlight current session**: If a session's ID matches `$CLAUDE_SESSION_ID`, add " ← current" after the row
 
 4. After the table, show:
 
