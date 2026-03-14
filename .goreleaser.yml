@@ -40,12 +40,7 @@ checksum:
   name_template: 'checksums.txt'
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
+  disable: true
 
 release:
   github:
@@ -53,3 +48,4 @@ release:
     name: super-resume
   draft: false
   prerelease: auto
+  release_notes_file: RELEASE_NOTES.md
