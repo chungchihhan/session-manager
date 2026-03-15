@@ -24,13 +24,7 @@ A session manager for Claude Code - browse, filter, pin, tag, and resume session
 
 ## Installation
 
-### One-liner Install (Recommended)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/chungchihhan/super-resume/main/install.sh | bash
-```
-
-### Claude Code Plugin Marketplace
+### Claude Code Plugin Marketplace (Recommended)
 
 ```bash
 # Add the marketplace
@@ -40,10 +34,10 @@ curl -fsSL https://raw.githubusercontent.com/chungchihhan/super-resume/main/inst
 /plugin install super-resume
 ```
 
-### Go Install
+### One-liner Install
 
 ```bash
-go install github.com/chungchihhan/super-resume/cmd/super-resume@latest
+curl -fsSL https://raw.githubusercontent.com/chungchihhan/super-resume/main/install.sh | bash
 ```
 
 ### Build from Source
@@ -183,15 +177,6 @@ Sessions are displayed with:
 
 - **Sessions**: `~/.claude/projects/**/*.jsonl`
 - **Metadata** (pins, tags, config): `~/.claude/session-metadata.json`
-
-## Development
-
-```bash
-make fmt    # Format code
-make test   # Run tests
-make build  # Build binary
-make run    # Build and run
-```
 
 ## License
 
