@@ -11,7 +11,7 @@ argument-hint: ""
 
 ## First-Time Setup (Marketplace Install)
 
-If you installed via the Claude Code marketplace, run `/setup` first to build the binary and configure your terminal:
+If you installed via the Claude Code marketplace, run `/setup` first to download the binary and configure your terminal:
 
 ```
 /setup
