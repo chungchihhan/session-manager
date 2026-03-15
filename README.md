@@ -34,7 +34,9 @@ A session manager for Claude Code - browse, filter, pin, tag, and resume session
 /plugin install super-resume
 ```
 
-### One-liner Install
+### One-liner Install (TUI only)
+
+If you only want the `super-resume` TUI in your terminal without Claude Code skills:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chungchihhan/super-resume/main/install.sh | bash
