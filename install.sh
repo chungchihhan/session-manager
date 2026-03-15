@@ -5,7 +5,7 @@ set -e
 # Usage: curl -fsSL https://raw.githubusercontent.com/chungchihhan/super-resume/main/install.sh | bash
 
 REPO="chungchihhan/super-resume"
-MARKETPLACE_NAME="super-resume"
+MARKETPLACE_NAME="chungchihhan"
 PLUGIN_NAME="super-resume"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 PLUGINS_DIR="$HOME/.claude/plugins"
