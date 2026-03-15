@@ -9,15 +9,20 @@ argument-hint: ""
 
 **The TUI must be run from your terminal, not inside Claude Code.**
 
+## First-Time Setup (Marketplace Install)
+
+If you installed via the Claude Code marketplace, run `/setup` first to build the binary and configure your terminal:
+
+```
+/setup
+```
+
+This only needs to be done once.
+
 ## How to Use
 
 ```bash
 super-resume
-```
-
-Or if installed via plugin:
-```bash
-~/.local/bin/super-resume
 ```
 
 ## Features
@@ -31,19 +36,19 @@ Or if installed via plugin:
 
 ## Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `↑/k` `↓/j` | Navigate |
-| `Enter` | Resume session |
-| `→/l` | Preview session |
-| `A` | Toggle all/current directory |
-| `S` | Show/hide agent sessions |
-| `P` | Pin/unpin |
-| `T` | Add tag |
-| `U` | Manage tags |
-| `D` | Delete |
-| `/` | Filter |
-| `Q` | Quit |
+| Key         | Action                       |
+| ----------- | ---------------------------- |
+| `↑/k` `↓/j` | Navigate                     |
+| `Enter`     | Resume session               |
+| `→/l`       | Preview session              |
+| `A`         | Toggle all/current directory |
+| `S`         | Show/hide agent sessions     |
+| `P`         | Pin/unpin                    |
+| `T`         | Add tag                      |
+| `U`         | Manage tags                  |
+| `D`         | Delete                       |
+| `/`         | Filter                       |
+| `Q`         | Quit                         |
 
 ## Quick Commands (inside Claude Code)
 

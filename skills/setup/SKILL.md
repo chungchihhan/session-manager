@@ -1,49 +1,67 @@
 ---
 name: setup
-description: Configure Super Resume settings (terminal preference)
+description: Configure Super Resume settings (terminal preference, build binary if needed)
 user-invocable: true
 argument-hint: ""
 ---
 
 # Setup Super Resume
 
-Configure Super Resume settings.
+Configure Super Resume and ensure the binary is built.
 
 ## Steps
 
-1. Check current terminal configuration:
+### Step 1: Ensure the binary exists
+
+Check if the binary exists:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/super-resume config terminal
+ls "${CLAUDE_PLUGIN_ROOT}/bin/super-resume" 2>/dev/null && echo "exists" || echo "missing"
 ```
 
-2. If not configured, ask the user which terminal they use:
+If missing, build it:
 
-**Which terminal do you use?**
+```bash
+cd "${CLAUDE_PLUGIN_ROOT}" && go build -o bin/super-resume ./cmd/super-resume
+```
+
+If `go` is not installed, tell the user:
+> The `super-resume` binary needs to be built. Please install Go from https://go.dev/dl/ then run `/setup` again.
+
+If build succeeds, confirm: "Binary built successfully."
+
+### Step 2: Check current terminal configuration
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/super-resume" config terminal
+```
+
+### Step 3: Configure terminal if not set
+
+If not configured, ask the user which terminal they use:
 
 | Option | Terminal |
 |--------|----------|
-| 1 | Terminal.app (macOS default) |
+| 1 | Warp |
 | 2 | iTerm2 |
-| 3 | Warp |
+| 3 | Terminal.app (macOS default) |
 | 4 | Kitty |
 | 5 | Alacritty |
 
-3. Once user selects, run:
+Once user selects, run:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/super-resume config terminal <terminal-name>
+"${CLAUDE_PLUGIN_ROOT}/bin/super-resume" config terminal <terminal-name>
 ```
 
-Where `<terminal-name>` is one of: `terminal`, `iterm`, `warp`, `kitty`, `alacritty`
+Where `<terminal-name>` is one of: `warp`, `iterm`, `terminal`, `kitty`, `alacritty`
 
-4. Confirm the setting was saved.
+### Step 4: Confirm setup complete
 
-5. **Important for Warp users:** Remind them to enable accessibility permissions:
-   - Open System Settings > Privacy & Security > Accessibility
-   - Enable access for Warp
+Tell the user setup is complete and they can now use:
+- `/list-session` - List sessions
+- `/go <n>` - Resume a session (opens new tab in configured terminal)
 
-## Notes
+## Notes for Warp users
 
-- This only needs to be done once
-- You can re-run `/setup` anytime to change your terminal preference
+Enable Warp in System Settings → Privacy & Security → Accessibility so `/go` can type commands in the new tab.
