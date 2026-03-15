@@ -27,7 +27,7 @@ ARCH=$(uname -m)
 [ "$ARCH" = "x86_64" ] && ARCH="amd64"
 [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ] && ARCH="arm64"
 
-VERSION=$(curl -s https://api.github.com/repos/chungchihhan/super-resume/releases/latest | grep -o '"tag_name":"[^"]*"' | grep -o 'v[0-9.]*' | tr -d 'v')
+VERSION=$(grep -o '"version": *"[^"]*"' "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/marketplace.json" | head -1 | grep -o '[0-9][0-9.]*')
 FILENAME="super-resume_${VERSION}_${OS}_${ARCH}.tar.gz"
 URL="https://github.com/chungchihhan/super-resume/releases/download/v${VERSION}/${FILENAME}"
 
