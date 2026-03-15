@@ -24,7 +24,7 @@ A session manager for Claude Code - browse, filter, pin, tag, and resume session
 
 ## Installation
 
-### Claude Code Plugin Marketplace (Recommended)
+### Option 1: Claude Code Plugin Marketplace (Recommended)
 
 ```bash
 # Add the marketplace
@@ -34,7 +34,7 @@ A session manager for Claude Code - browse, filter, pin, tag, and resume session
 /plugin install super-resume
 ```
 
-### One-liner Install (TUI only)
+### Option 2(TUI only): One-liner Install
 
 If you only want the `super-resume` TUI in your terminal without Claude Code skills:
 
@@ -42,7 +42,7 @@ If you only want the `super-resume` TUI in your terminal without Claude Code ski
 curl -fsSL https://raw.githubusercontent.com/chungchihhan/super-resume/main/install.sh | bash
 ```
 
-### Build from Source
+### Option3: Build from Source
 
 ```bash
 git clone https://github.com/chungchihhan/super-resume.git
